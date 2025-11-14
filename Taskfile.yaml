@@ -1,0 +1,12 @@
+version: "3"
+
+tasks:
+  default:
+    cmds:
+      - task: run
+
+  run:
+    cmds:
+      - go run ./cmds/main.go
+    env:
+      CONFIG_PATH: ./config/local.yaml

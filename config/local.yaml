@@ -1,0 +1,14 @@
+# This is a sample configuration file for the chat service.
+env: dev
+
+grpc:
+  host: localhost
+  port: 50052
+
+user_service:
+  host: localhost
+  port: 60001
+
+group_service:
+  host: localhost
+  port: 50051
