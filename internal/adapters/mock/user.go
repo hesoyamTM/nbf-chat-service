@@ -13,15 +13,15 @@ func (s *UserService) GetUsers(ctx context.Context, userIDs []uuid.UUID) ([]user
 	return []user.User{
 		{
 			ID:   uuid.MustParse("d5313639-46cf-42d1-9c23-1cd19c8dcfb9"),
-			Name: "test",
+			Name: "test1",
 		},
 		{
 			ID:   uuid.MustParse("d5313639-46cf-42d1-9c23-1cd19c8dcfb8"),
-			Name: "test",
+			Name: "test2",
 		},
 		{
 			ID:   uuid.MustParse("d5313639-46cf-42d1-9c23-1cd19c8dcfb7"),
-			Name: "test",
+			Name: "test3",
 		},
 	}, nil
 }

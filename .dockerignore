@@ -1,0 +1,33 @@
+# Git
+.git
+.gitignore
+
+# Тесты и документация
+tests/
+docs/
+*.md
+README.md
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Временные файлы
+*.tmp
+temp/
+
+# Виртуальные среды
+.env
+.env.example
+
+# IDE
+.idea
+.vscode
+
+# Docker
+docker-compose.yml
+Dockerfile

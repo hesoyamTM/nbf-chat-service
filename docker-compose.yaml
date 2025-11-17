@@ -1,0 +1,32 @@
+services:
+  nbf-chat-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: nbf-chat-service
+    container_name: nbf-chat-service
+    restart: unless-stopped
+    ports:
+      - "50052:50052"
+    volumes:
+      - ./config/docker.yaml:/app/config/local.yaml
+    environment:
+      - CONFIG_PATH=/app/config/local.yaml
+    depends_on:
+      - chat-postgres
+
+  chat-postgres:
+    image: postgres:14.1
+    container_name: chat-postgres
+    restart: unless-stopped
+    ports:
+      - "54320:54320"
+    volumes:
+      - nbf-chat-service-data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=chat
+
+volumes:
+  nbf-chat-service-data:

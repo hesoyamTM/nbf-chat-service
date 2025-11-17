@@ -9,6 +9,7 @@ import (
 	"github.com/hesoyamTM/nbf-auth/pkg/logger"
 	"github.com/hesoyamTM/nbf-chat-service/internal/domain/group"
 	"github.com/hesoyamTM/nbf-chat-service/internal/domain/message"
+	"github.com/hesoyamTM/nbf-chat-service/internal/domain/user"
 	"go.uber.org/zap"
 )
 
@@ -18,6 +19,8 @@ type GroupWorker struct {
 	group            group.Group
 
 	GroupCh chan message.InputMessage
+
+	messageRepository MessageRepository
 }
 
 type Connection struct {
@@ -25,7 +28,7 @@ type Connection struct {
 	outputChan chan message.Message
 }
 
-func NewGroupWorker(ctx context.Context, newGroup group.Group) (*GroupWorker, error) {
+func NewGroupWorker(ctx context.Context, newGroup group.Group, messageRepository MessageRepository) (*GroupWorker, error) {
 	const op = "chat.NewGroupWorker"
 
 	log, err := logger.LoggerFromCtx(ctx)
@@ -41,6 +44,8 @@ func NewGroupWorker(ctx context.Context, newGroup group.Group) (*GroupWorker, er
 		group:            newGroup,
 
 		GroupCh: make(chan message.InputMessage),
+
+		messageRepository: messageRepository,
 	}, nil
 }
 
@@ -58,9 +63,24 @@ func (g *GroupWorker) AddConnection(ctx context.Context, userID uuid.UUID, messa
 	)
 
 	g.connectionsMutex.Lock()
-	defer g.connectionsMutex.Unlock()
-
 	g.connections[userID] = messageCh
+	g.connectionsMutex.Unlock()
+
+	log.Info("Added connection for user", zap.String("user_id", userID.String()))
+
+	messages, err := g.messageRepository.GetAll(ctx, g.group.ID)
+	if err != nil {
+		return fmt.Errorf("%s: %w", op, err)
+	}
+
+	go func() {
+		log.Info("Sending messages to new connection", zap.String("user_id", userID.String()))
+		for _, message := range messages {
+			messageCh <- message
+		}
+		log.Info("Sent messages to new connection", zap.String("user_id", userID.String()))
+	}()
+
 	return nil
 }
 
@@ -95,22 +115,35 @@ func (g *GroupWorker) Run(ctx context.Context) {
 
 	for {
 		select {
-		case inputMsg := <-g.GroupCh:
+		case inputMsg, ok := <-g.GroupCh:
+			if !ok {
+				log.Info("Group worker stopped")
+				return
+			}
 
+			log.Info("Group worker received message", zap.String("from", inputMsg.UserID.String()))
+
+			member, ok := g.group.GetMember(inputMsg.UserID)
+
+			if !ok {
+				continue
+			}
+
+			user := user.User{ID: inputMsg.UserID, Name: member.Name}
+			msg := message.NewMessage(user, inputMsg.GroupID, inputMsg.Text)
+			g.messageRepository.Save(ctx, msg)
+
+			g.connectionsMutex.RLock()
 			for userID, outputChan := range g.connections {
 				if userID == inputMsg.UserID {
 					continue
 				}
 
-				member, ok := g.group.GetMember(userID)
-
-				if !ok {
-					continue
-				}
-
-				outputChan <- message.NewMessage(member, inputMsg.GroupID, inputMsg.Text)
+				outputChan <- msg
 			}
+			g.connectionsMutex.RUnlock()
 		case <-ctx.Done():
+			log.Info("Group worker stopped")
 			return
 		}
 	}

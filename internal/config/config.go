@@ -1,13 +1,17 @@
 // Package config contains the configuration for the application.
 package config
 
-import "github.com/hesoyamTM/nbf-chat-service/internal/adapters/services"
+import (
+	"github.com/hesoyamTM/nbf-chat-service/internal/adapters/repository/messages/psql"
+	"github.com/hesoyamTM/nbf-chat-service/internal/adapters/services"
+)
 
 type Config struct {
-	Env                string                      `yaml:"env" env:"ENV" env-required:"true"`
-	Grpc               GrpcConfig                  `yaml:"grpc"`
-	UserServiceConfig  services.UserServiceConfig  `yaml:"user_service"`
-	GroupServiceConfig services.GroupServiceConfig `yaml:"group_service"`
+	Env                   string                      `yaml:"env" env:"ENV" env-required:"true"`
+	Grpc                  GrpcConfig                  `yaml:"grpc"`
+	UserServiceConfig     services.UserServiceConfig  `yaml:"user_service"`
+	GroupServiceConfig    services.GroupServiceConfig `yaml:"group_service"`
+	PostgresMessageConfig psql.PostgresMessageConfig  `yaml:"postgres_message"`
 }
 
 type GrpcConfig struct {

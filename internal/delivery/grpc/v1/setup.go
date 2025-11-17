@@ -8,6 +8,7 @@ import (
 
 	"github.com/hesoyamTM/nbf-auth/pkg/logger"
 	"github.com/hesoyamTM/nbf-chat-service/internal/adapters/mock"
+	"github.com/hesoyamTM/nbf-chat-service/internal/adapters/repository/messages/inmemory"
 	"github.com/hesoyamTM/nbf-chat-service/internal/application/chat"
 	"github.com/hesoyamTM/nbf-chat-service/internal/config"
 	"google.golang.org/grpc"
@@ -42,17 +43,21 @@ func NewGrpcApp(ctx context.Context, cfg *config.Config) *GrpcApp {
 
 	// userService, err := services.NewUserService(cfg.UserServiceConfig)
 	// if err != nil {
-	// 	// TODO: add logger
 	// 	panic(fmt.Errorf("%s: %w", op, err))
 	// }
 	// groupService, err := services.NewGroupService(cfg.GroupServiceConfig)
 	// if err != nil {
-	// 	// TODO: add logger
 	// 	panic(fmt.Errorf("%s: %w", op, err))
 	// }
 	userService := &mock.UserService{}
 	groupService := &mock.GroupService{}
-	chatService := chat.NewChatService(userService, groupService, nil)
+	messageRepository := inmemory.NewInMemoryMessageRepository()
+	// messageRepository, err := psql.NewPostgresMessageRepository(ctx, cfg.PostgresMessageConfig)
+	if err != nil {
+		panic(fmt.Errorf("%s: %w", op, err))
+	}
+
+	chatService := chat.NewChatService(userService, groupService, messageRepository)
 
 	RegisterHandlers(grpcServer, chatService)
 	reflection.Register(grpcServer)

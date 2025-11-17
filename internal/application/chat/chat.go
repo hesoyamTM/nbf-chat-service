@@ -66,21 +66,28 @@ func (s *ChatService) SendMessage(ctx context.Context, messageCh <-chan message.
 			log.Error("failed to get group", zap.Error(err))
 			return nil, fmt.Errorf("%s: %w", op, err)
 		}
+		log.Info("got group", zap.String("group_id", msg.GroupID.String()))
 
-		groupWorker, err = NewGroupWorker(ctx, newGroup)
+		groupWorker, err = NewGroupWorker(ctx, newGroup, s.messageRepository)
 		if err != nil {
 			log.Error("failed to create group worker", zap.Error(err))
 			return nil, fmt.Errorf("%s: %w", op, err)
 		}
 
+		log.Info("created group worker", zap.String("group_id", msg.GroupID.String()))
+
 		s.groupWorkers[msg.GroupID] = groupWorker
 		go groupWorker.Run(ctx)
+		log.Info("started group worker", zap.String("group_id", msg.GroupID.String()))
 	}
 
-	groupWorker.AddConnection(ctx, msg.UserID, outputMessageCh)
-	groupWorker.GroupCh <- msg
-
 	go s.runListenMessages(ctx, groupWorker, msg.UserID, messageCh)
+	err = groupWorker.AddConnection(ctx, msg.UserID, outputMessageCh)
+	if err != nil {
+		log.Error("failed to add connection", zap.Error(err))
+		return nil, fmt.Errorf("%s: %w", op, err)
+	}
+	groupWorker.GroupCh <- msg
 
 	return outputMessageCh, nil
 }
