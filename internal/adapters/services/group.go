@@ -12,7 +12,7 @@ import (
 
 // GroupServiceConfig is a configuration for the GroupService.
 type GroupServiceConfig struct {
-	Address string
+	Address string `yaml:"address" env:"GROUP_SERVICE_ADDRESS" env-required:"true"`
 }
 
 // GroupService is a service that provides information about groups.

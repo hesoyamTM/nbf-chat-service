@@ -13,7 +13,7 @@ import (
 
 // UserServiceConfig is a configuration for the UserService.
 type UserServiceConfig struct {
-	Address string
+	Address string `yaml:"address" env:"USER_SERVICE_ADDRESS" env-required:"true"`
 }
 
 // UserService is a service that provides information about users.

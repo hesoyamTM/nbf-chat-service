@@ -6,12 +6,10 @@ grpc:
   port: 50052
 
 user_service:
-  host: user_service
-  port: 60001
+  address: user_service:50051
 
 group_service:
-  host: matcher_service
-  port: 50051
+  address: group_service:50051
 
 postgres_message:
   host: chat-postgres
