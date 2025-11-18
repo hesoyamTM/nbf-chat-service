@@ -17,34 +17,32 @@
 
     - CONFIG_PATH - путь к файлу конфигурации (рекомендуется использовать из config)
 
-    остальные переменные окружения используются если нет конфигурационного файла
-
-    - GRPC_HOST - адрес сервера для gRPC
-    - GRPC_PORT - порт сервера для gRPC
-    - USER_SERVICE_HOST - адрес сервера для User Service
-    - USER_SERVICE_PORT - порт сервера для User Service
-    - GROUP_SERVICE_HOST - адрес сервера для Group Service
-    - GROUP_SERVICE_PORT - порт сервера для Group Service
-    - POSTGRES_HOST - адрес сервера для Postgres
-    - POSTGRES_PORT - порт сервера для Postgres
-    - POSTGRES_USER - пользователь Postgres
-    - POSTGRES_PASSWORD - пароль Postgres
-    - POSTGRES_DB_NAME - имя базы данных Postgres
-
 ### Запуск
 
 Запуск через docker-compose (рекомендуется)
 
 ```bash
-git clone https://github.com/savelij/nbf-chat-service.git
+git clone https://github.com/hesoyamTM/nbf-chat-service.git
 cd nbf-chat-service
 docker-compose up -d
+```
+
+Запуск через docker:
+
+```bash
+docker pull hestm/nbf-chat-service
+
+# Укажите путь к файлу конфигурации
+docker run -d -p 50052:50052 \
+--mount type=bind,source=/path/to/config,target=/app/config/local.yaml \
+-e CONFIG_PATH=/app/config/local.yaml \
+hestm/nbf-chat-service
 ```
 
 Или запуск через golang
 
 ```bash
-git clone https://github.com/savelij/nbf-chat-service.git
+git clone https://github.com/hesoyamTM/nbf-chat-service.git
 cd nbf-chat-service
 go run cmds/main.go
 ```
@@ -52,7 +50,7 @@ go run cmds/main.go
 Через Taskfile
 
 ```bash
-git clone https://github.com/savelij/nbf-chat-service.git
+git clone https://github.com/hesoyamTM/nbf-chat-service.git
 cd nbf-chat-service
 task run
 ```
