@@ -7,18 +7,19 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hesoyamTM/nbf-auth/pkg/logger"
-	"github.com/hesoyamTM/nbf-chat-service/internal/domain/group"
+	"github.com/hesoyamTM/nbf-chat-service/internal/domain/chat"
 	"github.com/hesoyamTM/nbf-chat-service/internal/domain/message"
 	"github.com/hesoyamTM/nbf-chat-service/internal/domain/user"
 	"go.uber.org/zap"
 )
 
-type GroupWorker struct {
+type ChatWorker struct {
 	connectionsMutex sync.RWMutex
 	connections      map[uuid.UUID]chan message.Message
-	group            group.Group
 
-	GroupCh chan message.InputMessage
+	Chat chat.Chat
+
+	ChatCh chan message.InputMessage
 
 	messageRepository MessageRepository
 }
@@ -28,39 +29,34 @@ type Connection struct {
 	outputChan chan message.Message
 }
 
-func NewGroupWorker(ctx context.Context, newGroup group.Group, messageRepository MessageRepository) (*GroupWorker, error) {
-	const op = "chat.NewGroupWorker"
+func NewChatWorker(ctx context.Context, newChat chat.Chat, messageRepository MessageRepository) (*ChatWorker, error) {
+	const op = "chat.NewChatWorker"
 
 	log, err := logger.LoggerFromCtx(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
 
-	log.Info("New group worker for group", zap.String("group_id", newGroup.ID.String()))
+	log.Info("New chat worker for chat", zap.String("chat_id", newChat.ID.String()))
 
-	return &GroupWorker{
-		connections:      make(map[uuid.UUID]chan message.Message),
-		connectionsMutex: sync.RWMutex{},
-		group:            newGroup,
-
-		GroupCh: make(chan message.InputMessage),
-
+	return &ChatWorker{
+		Chat:              newChat,
+		ChatCh:            make(chan message.InputMessage),
 		messageRepository: messageRepository,
+		connections:       make(map[uuid.UUID]chan message.Message),
+		connectionsMutex:  sync.RWMutex{},
 	}, nil
 }
 
-func (g *GroupWorker) AddConnection(ctx context.Context, userID uuid.UUID, messageCh chan message.Message) error {
-	const op = "chat.GroupWorker.AddConnection"
+func (g *ChatWorker) AddConnection(ctx context.Context, userID uuid.UUID, messageCh chan message.Message) error {
+	const op = "chat.ChatWorker.AddConnection"
 
 	log, err := logger.LoggerFromCtx(ctx)
 	if err != nil {
 		return fmt.Errorf("%s: %w", op, err)
 	}
 
-	log.Info("Add connection for user",
-		zap.String("user_id", userID.String()),
-		zap.String("group_id", g.group.ID.String()),
-	)
+	log.Info("Add connection for user", zap.String("user_id", userID.String()), zap.String("chat_id", g.Chat.ID.String()))
 
 	g.connectionsMutex.Lock()
 	g.connections[userID] = messageCh
@@ -68,7 +64,7 @@ func (g *GroupWorker) AddConnection(ctx context.Context, userID uuid.UUID, messa
 
 	log.Info("Added connection for user", zap.String("user_id", userID.String()))
 
-	messages, err := g.messageRepository.GetAll(ctx, g.group.ID)
+	messages, err := g.messageRepository.GetAll(ctx, g.Chat.ID)
 	if err != nil {
 		return fmt.Errorf("%s: %w", op, err)
 	}
@@ -84,18 +80,15 @@ func (g *GroupWorker) AddConnection(ctx context.Context, userID uuid.UUID, messa
 	return nil
 }
 
-func (g *GroupWorker) RemoveConnection(ctx context.Context, userID uuid.UUID) {
-	const op = "chat.GroupWorker.RemoveConnection"
+func (g *ChatWorker) RemoveConnection(ctx context.Context, userID uuid.UUID) {
+	const op = "chat.ChatWorker.RemoveConnection"
 
 	log, err := logger.LoggerFromCtx(ctx)
 	if err != nil {
 		return
 	}
 
-	log.Info("Remove connection for user",
-		zap.String("user_id", userID.String()),
-		zap.String("group_id", g.group.ID.String()),
-	)
+	log.Info("Remove connection for user", zap.String("user_id", userID.String()), zap.String("chat_id", g.Chat.ID.String()))
 
 	g.connectionsMutex.Lock()
 	defer g.connectionsMutex.Unlock()
@@ -103,42 +96,38 @@ func (g *GroupWorker) RemoveConnection(ctx context.Context, userID uuid.UUID) {
 	delete(g.connections, userID)
 }
 
-func (g *GroupWorker) Run(ctx context.Context) {
-	const op = "chat.GroupWorker.Run"
+func (g *ChatWorker) Run(ctx context.Context) {
+	const op = "chat.ChatWorker.Run"
 
 	log, err := logger.LoggerFromCtx(ctx)
 	if err != nil {
 		return
 	}
 
-	log.Info("Start group worker for group", zap.String("group_id", g.group.ID.String()))
+	log.Info("Start chat worker for chat", zap.String("chat_id", g.Chat.ID.String()))
 
 	for {
 		select {
-		case inputMsg, ok := <-g.GroupCh:
+		case inputMsg, ok := <-g.ChatCh:
 			if !ok {
-				log.Info("Group worker stopped")
+				log.Info("Chat worker stopped")
 				return
 			}
 
-			log.Info("Group worker received message", zap.String("from", inputMsg.UserID.String()))
+			log.Info("Chat worker received message", zap.String("from", inputMsg.UserID.String()))
 
-			member, ok := g.group.GetMember(inputMsg.UserID)
+			member, ok := g.Chat.Members[inputMsg.UserID]
 
 			if !ok {
 				continue
 			}
 
 			user := user.User{ID: inputMsg.UserID, Name: member.Name}
-			msg := message.NewMessage(user, inputMsg.GroupID, inputMsg.Text)
+			msg := message.NewMessage(user, g.Chat.ID, inputMsg.Text)
 			g.messageRepository.Save(ctx, msg)
 
 			g.connectionsMutex.RLock()
-			for userID, outputChan := range g.connections {
-				if userID == inputMsg.UserID {
-					continue
-				}
-
+			for _, outputChan := range g.connections {
 				outputChan <- msg
 			}
 			g.connectionsMutex.RUnlock()
@@ -149,26 +138,22 @@ func (g *GroupWorker) Run(ctx context.Context) {
 	}
 }
 
-func (g *GroupWorker) ConnectionLen() int {
+func (g *ChatWorker) ConnectionLen() int {
 	g.connectionsMutex.RLock()
 	defer g.connectionsMutex.RUnlock()
 
 	return len(g.connections)
 }
 
-func (g *GroupWorker) Group() group.Group {
-	return g.group
-}
-
-func (g *GroupWorker) Dispose(ctx context.Context) error {
-	const op = "chat.GroupWorker.Dispose"
+func (g *ChatWorker) Dispose(ctx context.Context) error {
+	const op = "chat.ChatWorker.Dispose"
 
 	log, err := logger.LoggerFromCtx(ctx)
 	if err != nil {
 		return fmt.Errorf("%s: %w", op, err)
 	}
 
-	log.Info("Dispose group worker for group", zap.String("group_id", g.group.ID.String()))
+	log.Info("Dispose group worker for group", zap.String("group_id", g.Chat.ID.String()))
 
 	g.connectionsMutex.Lock()
 	defer g.connectionsMutex.Unlock()
@@ -177,6 +162,6 @@ func (g *GroupWorker) Dispose(ctx context.Context) error {
 		close(outputChan)
 	}
 
-	close(g.GroupCh)
+	close(g.ChatCh)
 	return nil
 }

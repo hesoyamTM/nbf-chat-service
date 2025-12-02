@@ -67,3 +67,20 @@ func (s *UserService) GetUsers(ctx context.Context, userIDs []uuid.UUID) ([]user
 
 	return users, nil
 }
+
+// GetUser returns information about a user.
+func (s *UserService) GetUser(ctx context.Context, userID uuid.UUID) (user.User, error) {
+	const op = "services.UserService.GetUser"
+
+	resp, err := s.api.GetUser(ctx, &userv1.GetUserRequest{
+		Id: userID.String(),
+	})
+	if err != nil {
+		return user.User{}, fmt.Errorf("%s: %w", op, err)
+	}
+
+	return user.User{
+		ID:   userID,
+		Name: resp.User.Name,
+	}, nil
+}

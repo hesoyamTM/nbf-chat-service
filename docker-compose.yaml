@@ -10,6 +10,7 @@ services:
       - "50052:50052"
     volumes:
       - ./config/docker.yaml:/app/config/local.yaml
+      - ./migrations:/app/migrations
     environment:
       - CONFIG_PATH=/app/config/local.yaml
     depends_on:
@@ -20,7 +21,7 @@ services:
     container_name: chat-postgres
     restart: unless-stopped
     ports:
-      - "54320:54320"
+      - "5432:5432"
     volumes:
       - nbf-chat-service-data:/var/lib/postgresql/data
     environment:

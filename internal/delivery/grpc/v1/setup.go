@@ -7,8 +7,8 @@ import (
 	"net"
 
 	"github.com/hesoyamTM/nbf-auth/pkg/logger"
-	"github.com/hesoyamTM/nbf-chat-service/internal/adapters/mock"
-	"github.com/hesoyamTM/nbf-chat-service/internal/adapters/repository/messages/inmemory"
+	"github.com/hesoyamTM/nbf-chat-service/internal/adapters/repository/messages/psql"
+	"github.com/hesoyamTM/nbf-chat-service/internal/adapters/services"
 	"github.com/hesoyamTM/nbf-chat-service/internal/application/chat"
 	"github.com/hesoyamTM/nbf-chat-service/internal/config"
 	"google.golang.org/grpc"
@@ -41,18 +41,15 @@ func NewGrpcApp(ctx context.Context, cfg *config.Config) *GrpcApp {
 		grpc.StreamInterceptor(loggingStreamInterceptor),
 	)
 
-	// userService, err := services.NewUserService(cfg.UserServiceConfig)
-	// if err != nil {
-	// 	panic(fmt.Errorf("%s: %w", op, err))
-	// }
-	// groupService, err := services.NewGroupService(cfg.GroupServiceConfig)
-	// if err != nil {
-	// 	panic(fmt.Errorf("%s: %w", op, err))
-	// }
-	userService := &mock.UserService{}
-	groupService := &mock.GroupService{}
-	messageRepository := inmemory.NewInMemoryMessageRepository()
-	// messageRepository, err := psql.NewPostgresMessageRepository(ctx, cfg.PostgresMessageConfig)
+	userService, err := services.NewUserService(cfg.UserServiceConfig)
+	if err != nil {
+		panic(fmt.Errorf("%s: %w", op, err))
+	}
+	groupService, err := services.NewGroupService(cfg.GroupServiceConfig)
+	if err != nil {
+		panic(fmt.Errorf("%s: %w", op, err))
+	}
+	messageRepository, err := psql.NewPostgresMessageRepository(ctx, cfg.PostgresMessageConfig)
 	if err != nil {
 		panic(fmt.Errorf("%s: %w", op, err))
 	}

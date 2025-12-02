@@ -7,7 +7,7 @@ require (
 	github.com/golang-migrate/migrate/v4 v4.19.0
 	github.com/google/uuid v1.6.0
 	github.com/hesoyamTM/nbf-auth v0.0.0-20251114161533-0328e0ea717a
-	github.com/hesoyamTM/nbf-protos v0.0.0-20251112193422-ae2f3fcc73d4
+	github.com/hesoyamTM/nbf-protos v0.0.0-20251119202756-9daab7e66e6f
 	github.com/lib/pq v1.10.9
 	go.uber.org/zap v1.27.0
 	google.golang.org/grpc v1.76.0
