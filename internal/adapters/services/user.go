@@ -59,8 +59,13 @@ func (s *UserService) GetUsers(ctx context.Context, userIDs []uuid.UUID) ([]user
 	users := make([]user.User, len(resp.Users))
 
 	for i, respUser := range resp.Users {
+		uid, err := uuid.Parse(respUser.Id)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", op, err)
+		}
+
 		users[i] = user.User{
-			ID:   userIDs[i],
+			ID:   uid,
 			Name: respUser.Name,
 		}
 	}

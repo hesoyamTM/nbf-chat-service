@@ -341,11 +341,12 @@ func (r *PostgresMessageRepository) GetChatByUser(ctx context.Context, senderID,
 		return chat.Chat{}, fmt.Errorf("%s: %w", op, err)
 	}
 
-	query := `SELECT id
-	FROM chats
-	WHERE user_id = $1 AND group_id IS NULL`
+	query := `SELECT c.id
+	FROM chats as c
+	JOIN chats AS c2 ON c2.id = c.id
+	WHERE c2.user_id = $1 AND c.user_id = $2 AND c.group_id IS NULL AND c2.group_id IS NULL`
 
-	row := r.db.QueryRowContext(ctx, query, userID)
+	row := r.db.QueryRowContext(ctx, query, userID, senderID)
 
 	var chatID uuid.NullUUID
 	err = row.Scan(&chatID)
@@ -369,7 +370,7 @@ func (r *PostgresMessageRepository) GetChatByUser(ctx context.Context, senderID,
 	return r.GetChatByID(ctx, senderID, chatID.UUID)
 }
 
-func (r *PostgresMessageRepository) GetChatsByUser(ctx context.Context, userID uuid.UUID) ([]chat.ChatDialog, error) {
+func (r *PostgresMessageRepository) GetChatsByUser(ctx context.Context, userID uuid.UUID) ([]chat.Chat, error) {
 	const op = "repository.PostgresMessageRepository.GetChatsByUser"
 
 	log, err := logger.LoggerFromCtx(ctx)
@@ -377,8 +378,9 @@ func (r *PostgresMessageRepository) GetChatsByUser(ctx context.Context, userID u
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
 
-	query := `SELECT c.id, c.chat_name, c.group_id
+	query := `SELECT c.id, c.chat_name, c.group_id, c2.user_id
 	FROM chats AS c
+	JOIN chats AS c2 ON c2.id = c.id
 	WHERE c.user_id = $1`
 
 	rows, err := r.db.QueryContext(ctx, query, userID)
@@ -388,16 +390,16 @@ func (r *PostgresMessageRepository) GetChatsByUser(ctx context.Context, userID u
 	}
 	defer rows.Close()
 
-	chats := make([]chat.ChatDialog, 0)
+	chatMap := make(map[uuid.UUID]*chat.Chat)
 
 	for rows.Next() {
 		var (
-			id              uuid.NullUUID
-			name            string
-			userID, groupID uuid.NullUUID
+			id                uuid.NullUUID
+			name              string
+			memberID, groupID uuid.NullUUID
 		)
 
-		err := rows.Scan(&id, &name, &groupID)
+		err := rows.Scan(&id, &name, &groupID, &memberID)
 		if err != nil {
 			log.Error("Failed to scan row", zap.Error(err))
 			return nil, fmt.Errorf("%s: %w", op, err)
@@ -406,16 +408,27 @@ func (r *PostgresMessageRepository) GetChatsByUser(ctx context.Context, userID u
 		if !id.Valid {
 			log.Error("Invalid chat id",
 				zap.String("chat_id", id.UUID.String()),
-				zap.String("user_id", userID.UUID.String()),
+				zap.String("member_id", memberID.UUID.String()),
 			)
 			// TODO: handle this case
 			continue
 		}
 
-		chats = append(chats, chat.ChatDialog{
-			ID:   id.UUID,
-			Name: name,
-		})
+		currentChat, ok := chatMap[id.UUID]
+		if !ok {
+			currentChat = &chat.Chat{
+				ID:      id.UUID,
+				Name:    name,
+				Members: make(map[uuid.UUID]user.User),
+			}
+			chatMap[id.UUID] = currentChat
+		}
+		currentChat.Members[memberID.UUID] = user.User{ID: memberID.UUID}
+	}
+
+	chats := make([]chat.Chat, 0, len(chatMap))
+	for _, chat := range chatMap {
+		chats = append(chats, *chat)
 	}
 
 	return chats, nil

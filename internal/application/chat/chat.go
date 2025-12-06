@@ -105,23 +105,49 @@ func (s *ChatService) SendMessage(
 }
 
 // GetChatsByUser returns chats that the user is in.
-func (s *ChatService) GetChatsByUser(ctx context.Context, userID uuid.UUID) ([]chat.ChatDialog, error) {
+func (s *ChatService) GetChatsByUser(ctx context.Context, userID uuid.UUID) ([]chat.Chat, error) {
 	const op = "chat.ChatService.GetChatsByUser"
+
+	log, err := logger.LoggerFromCtx(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", op, err)
+	}
+
+	log.Info("Get chats by user", zap.String("user_id", userID.String()))
 
 	chats, err := s.messageRepository.GetChatsByUser(ctx, userID)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
 
-	return chats, nil
+	chatsWithMember := make([]chat.Chat, 0, len(chats))
+
+	for _, chatDialog := range chats {
+		chat, err := s.getChatWithMembers(ctx, chatDialog)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", op, err)
+		}
+		chatsWithMember = append(chatsWithMember, chat)
+	}
+
+	return chatsWithMember, nil
 }
 
 // runListenMessages listens messages from users and redirect them to the chat.
 func (s *ChatService) runListenMessages(ctx context.Context, chatWorker *ChatWorker, userID uuid.UUID, inputMessageCh <-chan message.InputMessage) {
+	log, err := logger.LoggerFromCtx(ctx)
+	if err != nil {
+		return
+	}
+
+	log.Info("Started listening messages from user")
+
 	for inputMsg := range inputMessageCh {
 		chatWorker.ChatCh <- inputMsg
 	}
+	log.Info("Stopped listening messages from user")
 	s.disconnectUser(ctx, chatWorker, userID)
+	log.Info("Disconnected user from chat")
 }
 
 // disconnectUser disconnects the user from the group. If the user is the last one, the group is disposed.
@@ -140,6 +166,13 @@ func (s *ChatService) disconnectUser(ctx context.Context, chatWorker *ChatWorker
 // getGroup returns the group with the given id.
 func (s *ChatService) getGroup(ctx context.Context, groupID uuid.UUID) (group.Group, error) {
 	const op = "chat.ChatService.getGroup"
+
+	log, err := logger.LoggerFromCtx(ctx)
+	if err != nil {
+		return group.Group{}, fmt.Errorf("%s: %w", op, err)
+	}
+
+	log.Info("Get group", zap.String("group_id", groupID.String()))
 
 	groupName, err := s.groupService.GetGroup(ctx, groupID)
 	if err != nil {
@@ -162,6 +195,13 @@ func (s *ChatService) getGroup(ctx context.Context, groupID uuid.UUID) (group.Gr
 // getChat returns the chat with the given ids. Only one of chatID, groupID, and userID should be non-nil.
 func (s *ChatService) getChat(ctx context.Context, senderID, chatID, groupID, userID uuid.UUID) (chat.Chat, error) {
 	const op = "chat.getChat"
+
+	log, err := logger.LoggerFromCtx(ctx)
+	if err != nil {
+		return chat.Chat{}, fmt.Errorf("%s: %w", op, err)
+	}
+
+	log.Info("Get chat", zap.String("chat_id", chatID.String()), zap.String("group_id", groupID.String()), zap.String("user_id", userID.String()))
 
 	if chatID == uuid.Nil {
 		chatDialog, err := s.messageRepository.GetChatByID(ctx, senderID, chatID)
@@ -194,6 +234,11 @@ func (s *ChatService) getChat(ctx context.Context, senderID, chatID, groupID, us
 func (s *ChatService) getChatWithMembers(ctx context.Context, chatDialog chat.Chat) (chat.Chat, error) {
 	const op = "chat.getChatWithMembers"
 
+	log, err := logger.LoggerFromCtx(ctx)
+	if err != nil {
+		return chat.Chat{}, fmt.Errorf("%s: %w", op, err)
+	}
+
 	membersIDs := make([]uuid.UUID, 0, len(chatDialog.Members))
 	for _, member := range chatDialog.Members {
 		membersIDs = append(membersIDs, member.ID)
@@ -207,6 +252,7 @@ func (s *ChatService) getChatWithMembers(ctx context.Context, chatDialog chat.Ch
 	mapMembers := make(map[uuid.UUID]user.User)
 	for _, member := range members {
 		mapMembers[member.ID] = member
+		log.Info("Member", zap.String("id", member.ID.String()), zap.String("name", member.Name))
 	}
 
 	return chat.Chat{
@@ -259,12 +305,30 @@ func (s *ChatService) createChatByUser(ctx context.Context, senderID, userID uui
 	const op = "chat.createChatByUser"
 
 	chatID := uuid.New()
-
-	_, err := s.messageRepository.CreateNewChatByUser(ctx, chatID, senderID, uuid.Nil, userID.String())
+	sender, err := s.userService.GetUser(ctx, senderID)
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("%s: %w", op, err)
 	}
-	_, err = s.messageRepository.CreateNewChatByUser(ctx, chatID, userID, uuid.Nil, senderID.String())
+	user, err := s.userService.GetUser(ctx, userID)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("%s: %w", op, err)
+	}
+
+	_, err = s.messageRepository.CreateNewChatByUser(ctx,
+		chatID,
+		senderID,
+		uuid.Nil,
+		user.Name,
+	)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("%s: %w", op, err)
+	}
+	_, err = s.messageRepository.CreateNewChatByUser(ctx,
+		chatID,
+		userID,
+		uuid.Nil,
+		sender.Name,
+	)
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("%s: %w", op, err)
 	}

@@ -27,7 +27,7 @@ type MessageRepository interface {
 	CreateNewChatByUser(ctx context.Context, chatID, userID, groupID uuid.UUID, chatName string) (uuid.UUID, error)
 
 	GetChatByUser(ctx context.Context, senderID, userID uuid.UUID) (chat.Chat, error)
-	GetChatsByUser(ctx context.Context, userID uuid.UUID) ([]chat.ChatDialog, error)
+	GetChatsByUser(ctx context.Context, userID uuid.UUID) ([]chat.Chat, error)
 	GetChatByGroup(ctx context.Context, senderID, groupID uuid.UUID) (chat.Chat, error)
 	GetChatByID(ctx context.Context, senderID, chatID uuid.UUID) (chat.Chat, error)
 

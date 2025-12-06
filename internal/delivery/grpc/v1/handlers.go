@@ -3,6 +3,7 @@ package grpcv1
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/hesoyamTM/nbf-auth/pkg/logger"
@@ -24,7 +25,7 @@ type ChatService interface {
 		chatID uuid.UUID, // chatID that getting the message
 		messageCh <-chan message.InputMessage,
 	) (<-chan message.Message, error)
-	GetChatsByUser(ctx context.Context, userID uuid.UUID) ([]chat.ChatDialog, error)
+	GetChatsByUser(ctx context.Context, userID uuid.UUID) ([]chat.Chat, error)
 }
 
 type serverAPI struct {
@@ -56,6 +57,7 @@ func (s *serverAPI) SendMessage(stream chatv1.ChatService_SendMessageServer) err
 			if err != nil {
 				return
 			}
+			log.Info("Received message from client", zap.String("user_id", msg.GetUserId()))
 
 			userID, err := uuid.Parse(msg.GetUserId())
 			if err != nil {
@@ -69,10 +71,19 @@ func (s *serverAPI) SendMessage(stream chatv1.ChatService_SendMessageServer) err
 			// 	return
 			// }
 
-			inputMessageCh <- message.InputMessage{
+			select {
+			case <-time.After(time.Second * 10):
+				log.Info("Timeout sending message to new connection")
+				return
+			case inputMessageCh <- message.InputMessage{
 				Text:   msg.Text,
 				UserID: userID,
 				// ChatID: chatID,
+			}:
+				log.Info("Sent message to new connection")
+			case <-stream.Context().Done():
+				log.Info("Stopped sending messages to new connection")
+				return
 			}
 		}
 	}()
@@ -100,6 +111,7 @@ func (s *serverAPI) SendMessage(stream chatv1.ChatService_SendMessageServer) err
 		log.Error("failed to send message", zap.Error(err))
 		return fmt.Errorf("%s: %w", op, err)
 	}
+	log.Info("Started sending messages to client")
 
 	for {
 		select {
@@ -109,6 +121,8 @@ func (s *serverAPI) SendMessage(stream chatv1.ChatService_SendMessageServer) err
 			if !ok {
 				return fmt.Errorf("%s: outputMessageCh closed", op)
 			}
+
+			// log.Info("Sending message to client", zap.String("user_id", message.User.ID.String()))
 
 			user := &chatv1.User{
 				Name: message.User.Name,
@@ -124,6 +138,7 @@ func (s *serverAPI) SendMessage(stream chatv1.ChatService_SendMessageServer) err
 			if err := stream.Send(resp); err != nil {
 				return fmt.Errorf("stream.Send: %w", err)
 			}
+			// log.Info("Sent message to client", zap.String("user_id", message.User.ID.String()))
 		}
 	}
 }
@@ -153,9 +168,20 @@ func (s *serverAPI) GetChatsByUser(ctx context.Context, req *chatv1.GetChatByUse
 	}
 
 	for i, chat := range chats {
+		members := make([]*chatv1.User, len(chat.Members))
+		k := 0
+		for _, member := range chat.Members {
+			members[k] = &chatv1.User{
+				Name: member.Name,
+				Id:   member.ID.String(),
+			}
+			k++
+		}
+
 		resp.Chat[i] = &chatv1.Chat{
-			Id:   chat.ID.String(),
-			Name: chat.Name,
+			Id:      chat.ID.String(),
+			Name:    chat.Name,
+			Members: members,
 		}
 	}
 	return resp, nil

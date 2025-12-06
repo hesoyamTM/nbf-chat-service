@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/hesoyamTM/nbf-auth/pkg/logger"
@@ -72,7 +73,15 @@ func (g *ChatWorker) AddConnection(ctx context.Context, userID uuid.UUID, messag
 	go func() {
 		log.Info("Sending messages to new connection", zap.String("user_id", userID.String()))
 		for _, message := range messages {
-			messageCh <- message
+			message.User = g.Chat.Members[message.User.ID]
+
+			select {
+			case <-time.After(time.Second * 10):
+				log.Info("Timeout sending message to new connection", zap.String("user_id", userID.String()))
+				g.RemoveConnection(ctx, userID)
+				return
+			case messageCh <- message:
+			}
 		}
 		log.Info("Sent messages to new connection", zap.String("user_id", userID.String()))
 	}()
@@ -106,36 +115,35 @@ func (g *ChatWorker) Run(ctx context.Context) {
 
 	log.Info("Start chat worker for chat", zap.String("chat_id", g.Chat.ID.String()))
 
-	for {
-		select {
-		case inputMsg, ok := <-g.ChatCh:
-			if !ok {
-				log.Info("Chat worker stopped")
-				return
-			}
+	for inputMsg := range g.ChatCh {
 
-			log.Info("Chat worker received message", zap.String("from", inputMsg.UserID.String()))
+		log.Info("Chat worker received message", zap.String("from", inputMsg.UserID.String()))
 
-			member, ok := g.Chat.Members[inputMsg.UserID]
+		member, ok := g.Chat.Members[inputMsg.UserID]
 
-			if !ok {
-				continue
-			}
-
-			user := user.User{ID: inputMsg.UserID, Name: member.Name}
-			msg := message.NewMessage(user, g.Chat.ID, inputMsg.Text)
-			g.messageRepository.Save(ctx, msg)
-
-			g.connectionsMutex.RLock()
-			for _, outputChan := range g.connections {
-				outputChan <- msg
-			}
-			g.connectionsMutex.RUnlock()
-		case <-ctx.Done():
-			log.Info("Group worker stopped")
-			return
+		if !ok {
+			continue
 		}
+
+		user := user.User{ID: inputMsg.UserID, Name: member.Name}
+		msg := message.NewMessage(user, g.Chat.ID, inputMsg.Text)
+		g.messageRepository.Save(ctx, msg)
+
+		g.connectionsMutex.RLock()
+		for _, outputChan := range g.connections {
+			go func(outputChan chan<- message.Message) {
+				select {
+				case <-time.After(time.Second * 10):
+					g.RemoveConnection(ctx, inputMsg.UserID)
+					return
+				case outputChan <- msg:
+				}
+			}(outputChan)
+		}
+		g.connectionsMutex.RUnlock()
 	}
+
+	log.Info("Chat worker stopped")
 }
 
 func (g *ChatWorker) ConnectionLen() int {
