@@ -166,7 +166,7 @@ func (r *PostgresMessageRepository) GetChatIDByUser(ctx context.Context, senderI
 	query := `SELECT c.id
 	FROM chats
 	JOIN chats AS c ON c.id = chats.id
-	WHERE c.user_id = $1 AND chats.user_id = $2`
+	WHERE c.user_id = $1 AND chats.user_id = $2 AND c.group_id is NULL AND chats.group_id is NULL`
 
 	row := r.db.QueryRowContext(ctx, query, senderID, userID)
 
@@ -474,4 +474,106 @@ func (r *PostgresMessageRepository) SetLastReadAt(ctx context.Context, userID, c
 	}
 
 	return nil
+}
+
+func (r *PostgresMessageRepository) DeleteUserFromChatByGroup(ctx context.Context, userID, groupID uuid.UUID) error {
+	const op = "postgres.PostgresMessageRepository.DeleteUserFromChatByGroup"
+
+	log, err := logger.LoggerFromCtx(ctx)
+	if err != nil {
+		return fmt.Errorf("%s: %w", op, err)
+	}
+
+	query := `DELETE FROM chats
+	WHERE user_id = $1 AND group_id = $2`
+
+	_, err = r.db.ExecContext(ctx, query, userID, groupID)
+	if err != nil {
+		log.Error("Failed to delete user from chat", zap.Error(err))
+		return fmt.Errorf("%s: %w", op, err)
+	}
+
+	return nil
+}
+
+func (r *PostgresMessageRepository) DeleteChatByGroup(ctx context.Context, groupID uuid.UUID) error {
+	const op = "postgres.PostgresMessageRepository.DeleteChatByGroup"
+
+	log, err := logger.LoggerFromCtx(ctx)
+	if err != nil {
+		return fmt.Errorf("%s: %w", op, err)
+	}
+
+	query := `DELETE FROM chats
+	WHERE group_id = $1`
+
+	_, err = r.db.ExecContext(ctx, query, groupID)
+	if err != nil {
+		log.Error("Failed to delete chat", zap.Error(err))
+		return fmt.Errorf("%s: %w", op, err)
+	}
+
+	query = `DELETE FROM groups
+	WHERE group_id = $1`
+
+	_, err = r.db.ExecContext(ctx, query, groupID)
+	if err != nil {
+		log.Error("Failed to delete group", zap.Error(err))
+		return fmt.Errorf("%s: %w", op, err)
+	}
+
+	return nil
+}
+
+// GetChatIDByGroupID returns the chat id by the group id. Creates a new chat if it doesn't exist.
+func (r *PostgresMessageRepository) GetChatIDByGroupID(ctx context.Context, groupID uuid.UUID) (uuid.UUID, error) {
+	const op = "postgres.PostgresMessageRepository.GetChatByGroup"
+
+	log, err := logger.LoggerFromCtx(ctx)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("%s: %w", op, err)
+	}
+
+	var chatID uuid.UUID
+	query := `SELECT chat_id FROM groups WHERE group_id = $1`
+	err = r.db.QueryRowContext(ctx, query, groupID).Scan(&chatID)
+
+	if err == nil {
+		// Чат найден
+		return chatID, nil
+	}
+
+	if err != sql.ErrNoRows {
+		log.Error("Failed to get chat", zap.Error(err))
+		return uuid.Nil, fmt.Errorf("%s: %w", op, err)
+	}
+
+	return r.CreateChatByGroup(ctx, groupID)
+}
+
+func (r *PostgresMessageRepository) CreateChatByGroup(ctx context.Context, groupID uuid.UUID) (uuid.UUID, error) {
+	const op = "postgres.PostgresMessageRepository.CreateChatByGroup"
+
+	log, err := logger.LoggerFromCtx(ctx)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("%s: %w", op, err)
+	}
+
+	query := `INSERT INTO groups (group_id) VALUES ($1) RETURNING chat_id`
+
+	var chatID uuid.NullUUID
+	err = r.db.QueryRowContext(ctx, query, groupID).Scan(&chatID)
+	if err != nil {
+		log.Error("Failed to create chat", zap.Error(err))
+		return uuid.Nil, fmt.Errorf("%s: %w", op, err)
+	}
+
+	if !chatID.Valid {
+		log.Error("Invalid chat id",
+			zap.String("chat_id", chatID.UUID.String()),
+		)
+		return uuid.Nil, fmt.Errorf("%s: Invalid chat id", op)
+	}
+
+	return chatID.UUID, nil
 }

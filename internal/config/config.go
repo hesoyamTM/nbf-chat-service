@@ -4,6 +4,7 @@ package config
 import (
 	"github.com/hesoyamTM/nbf-chat-service/internal/adapters/repository/messages/psql"
 	"github.com/hesoyamTM/nbf-chat-service/internal/adapters/services"
+	"github.com/hesoyamTM/nbf-chat-service/pkg/redpanda"
 )
 
 type Config struct {
@@ -12,6 +13,7 @@ type Config struct {
 	UserServiceConfig     services.UserServiceConfig  `yaml:"user_service"`
 	GroupServiceConfig    services.GroupServiceConfig `yaml:"group_service"`
 	PostgresMessageConfig psql.PostgresMessageConfig  `yaml:"postgres_message"`
+	Redpanda              redpanda.RedpandaConfig     `yaml:"redpanda"`
 }
 
 type GrpcConfig struct {

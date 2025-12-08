@@ -36,4 +36,9 @@ type MessageRepository interface {
 
 	IncrementUnreadCount(ctx context.Context, userID, chatID uuid.UUID, receiverID uuid.UUID) error
 	SetLastReadAt(ctx context.Context, userID, chatID uuid.UUID, lastReadAt time.Time) error
+
+	CreateChatByGroup(ctx context.Context, groupID uuid.UUID) (uuid.UUID, error)
+	DeleteUserFromChatByGroup(ctx context.Context, userID, groupID uuid.UUID) error
+	DeleteChatByGroup(ctx context.Context, groupID uuid.UUID) error
+	GetChatIDByGroupID(ctx context.Context, groupID uuid.UUID) (uuid.UUID, error)
 }

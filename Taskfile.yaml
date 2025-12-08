@@ -32,3 +32,13 @@ tasks:
           -t {{.DOCKERHUB_USER}}/{{.IMAGE_NAME}}:{{.VERSION}} \
           --push \
           .
+
+  bt:
+    desc: "Build and push multi-arch image"
+    cmds:
+      - |
+        docker buildx build \
+          --platform linux/amd64 \
+          -t {{.DOCKERHUB_USER}}/{{.IMAGE_NAME}}:test \
+          --push \
+          .

@@ -17,3 +17,12 @@ postgres_message:
   user: postgres
   password: postgres
   db_name: chat
+
+redpanda:
+  brokers:
+    - localhost:9092
+  group_id: chat-service
+  topics:
+    - matcher.group.accept
+    - matcher.group.leave
+    - matcher.group.kick

@@ -7,9 +7,6 @@ import (
 	"net"
 
 	"github.com/hesoyamTM/nbf-auth/pkg/logger"
-	"github.com/hesoyamTM/nbf-chat-service/internal/adapters/repository/messages/psql"
-	"github.com/hesoyamTM/nbf-chat-service/internal/adapters/services"
-	"github.com/hesoyamTM/nbf-chat-service/internal/application/chat"
 	"github.com/hesoyamTM/nbf-chat-service/internal/config"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
@@ -23,7 +20,7 @@ type GrpcApp struct {
 }
 
 // NewGrpcApp returns a new instance of GrpcApp.
-func NewGrpcApp(ctx context.Context, cfg *config.Config) *GrpcApp {
+func NewGrpcApp(ctx context.Context, chatService ChatService, cfg *config.GrpcConfig) *GrpcApp {
 	const op = "grpcv1.NewGrpcApp"
 
 	loggingUnaryInterceptor, err := logger.NewLoggingInterceptor(ctx)
@@ -41,28 +38,13 @@ func NewGrpcApp(ctx context.Context, cfg *config.Config) *GrpcApp {
 		grpc.StreamInterceptor(loggingStreamInterceptor),
 	)
 
-	userService, err := services.NewUserService(cfg.UserServiceConfig)
-	if err != nil {
-		panic(fmt.Errorf("%s: %w", op, err))
-	}
-	groupService, err := services.NewGroupService(cfg.GroupServiceConfig)
-	if err != nil {
-		panic(fmt.Errorf("%s: %w", op, err))
-	}
-	messageRepository, err := psql.NewPostgresMessageRepository(ctx, cfg.PostgresMessageConfig)
-	if err != nil {
-		panic(fmt.Errorf("%s: %w", op, err))
-	}
-
-	chatService := chat.NewChatService(userService, groupService, messageRepository)
-
 	RegisterHandlers(grpcServer, chatService)
 	reflection.Register(grpcServer)
 
 	return &GrpcApp{
 		server: grpcServer,
-		host:   cfg.Grpc.Host,
-		port:   cfg.Grpc.Port,
+		host:   cfg.Host,
+		port:   cfg.Port,
 	}
 }
 
