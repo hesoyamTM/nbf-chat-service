@@ -28,6 +28,8 @@ func NewRedPandaApp(ctx context.Context, chatService ChatService, config redpand
 		log.Fatal("failed to get logger from context")
 	}
 
+	l.Debug("redpanda host", zap.Any("host", config.Brokers))
+
 	saramaCfg := redpanda.NewSaramaConfig(config)
 	consumerGroup, err := redpanda.NewSaramaConsumer(saramaCfg,
 		config.Brokers,

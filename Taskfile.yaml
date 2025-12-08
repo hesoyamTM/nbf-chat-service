@@ -38,7 +38,7 @@ tasks:
     cmds:
       - |
         docker buildx build \
-          --platform linux/amd64 \
-          -t {{.DOCKERHUB_USER}}/{{.IMAGE_NAME}}:test \
+          --platform linux/amd64,linux/arm64 \
+          -t {{.DOCKERHUB_USER}}/{{.IMAGE_NAME}}:test2 \
           --push \
           .
